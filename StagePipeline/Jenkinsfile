@@ -21,12 +21,15 @@ pipeline{
       NEXUS_LOGIN = 'nexuslogin'
       SONARSERVER = 'sonarserver'
       SONARSCANNER = 'sonarscanner'
+      registryCredential = 'ecr:us-east-1:awscreds'
+      appRegistry = '810533281383.dkr.ecr.us-east-1.amazonaws.com/vprofileappimg'
+      vprofileRegistry = 'https://810533281383.dkr.ecr.us-east-1.amazonaws.com'
     }
     
     stages {
       stage('Build'){
         steps{
-          sh 'maven -s settings.xml -DskipTests install'
+          sh 'mvn -s settings.xml -DskipTests install'
         }
         post{
           success{
@@ -66,7 +69,7 @@ pipeline{
         }
       }
 
-      stage("Quality Gate") {
+      stage('Quality Gate') {
           steps {
             timeout(time: 5, unit: 'MINUTES') {
                     // Parameter indicates whether to set pipeline to UNSTABLE if Quality Gate fails
@@ -76,7 +79,7 @@ pipeline{
             }
       }
 
-      stage("UploadArtifact"){
+      stage('UploadArtifact'){
         steps{
           nexusArtifactUploader(
             nexusVersion: 'nexus3',
@@ -93,6 +96,25 @@ pipeline{
               type: 'war']
             ]
           )
+        }
+      }
+
+      stage('Build App Image'){
+        steps{
+          script{
+            dockerImage = docker.build( appRegistry + ":$BUILD_NUMBER", "./Docker-files/app/multistage")
+          }
+        }
+      }
+
+      stage('Upload App Image'){
+        steps{
+          script{
+            docker.withRegistry( vprofileRegistry, registryCredential ){
+              dockerImage.push("$BUILD_NUMBER")
+              dockerImage.push('latest')
+            }
+          }
         }
       }
 
